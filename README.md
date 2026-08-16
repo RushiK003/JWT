@@ -116,6 +116,83 @@ prerequisit : installed
             });
         });
 
+✅ Level 7 — Backend Folder Structure : Routes → Controllers → Services
+    backend/src
+    ├── server.js
+    ├── routes/                     "Which URL was requested?"
+    │   └── authRoutes.js   
+    ├── controllers/                "What should I do with this request?"
+    │   └── authController.js
+    ├── services/                   "How should I perform the actual operation?"
+    │   └── authService.js          
+    └── middlewares/
+
+    routes/authRoutes.js
+        import express from "express";
+        import authController from "../controllers/authController.js";
+
+        const router = express.Router();
+
+        router.post("/login", authController)
+
+        //  router.post("/login", (req, res) => { 
+        //      res.json({ message : "Login route working" });
+        //  });
+
+        export default router;
+
+    controllers/authController.js
+        import authService from "../services/authService.js"
+
+        const login = (req, res) => {
+            const { email, password } = req.body;
+
+            const result = authService.login(email,password);
+           
+            if(!result.success) {
+                return res.status(401).json({
+                    message : result.message
+                });
+            }
+
+            return res.json({
+                message: result.message
+            });
+        };
+        export default login ;
+
+    services/authService.js
+        const login = ( email, password ) => {
+            if (
+                email === "admin@gmail.com" && 
+                password === "123456"
+            ) {
+                return {
+                    success : true,
+                    message : "Login successful"
+                };
+            }
+            return {
+                success : false,
+                message : "Invalid Credentials"
+            };
+        };
+        export default { login };  
+
+    SERVICE file :
+        authService.js
+                └── we exports OBJECT
+                        {
+                            login,
+                            register,
+                            logout
+                        }
+    CONTROLLER
+        authController.js
+                └── we just exports FUNCTION
+                            login(req, res)
+
+-------------------------------------------------------------------------------------
 
     ==general knowledge==
 

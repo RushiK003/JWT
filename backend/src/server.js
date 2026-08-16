@@ -1,7 +1,7 @@
 import http from "http";
 import cors from "cors"
 import express from "express";
-
+import authRoutes from "./routes/authRoutes.js"
 
 const app = express();
 
@@ -10,32 +10,25 @@ app.use(cors({
     // origin: "http://localhost:5173/"
 }));
 
-
 // below middleware helps to parse(Break down) incoming HTTP request bodies with JSON payloads.
 app.use(express.json()); 
 
-
-app.get("/checkapi", (req, res) => {
-    // unnecessary feature : just to see how it works
-    console.log("API handshake");
-    res.send("Handshake from backend");
-});
-
-app.post("/login", (req, res) => {
-    const { email, password } = req.body;
-    // console.log(req.body)
-    if (
-        email === "admin@gmail.com" &&
-        password === "123456"
-    ) {
-        return res.json({
-            message: "Login Successful"
-        });
-    }
-    return res.status(401).json({
-        message: "Invalid Credentials"
-    });
-});
+app.use("/", authRoutes);
+// app.post("/login", (req, res) => {
+//     const { email, password } = req.body;
+//     // console.log(req.body)
+//     if (
+//         email === "admin@gmail.com" &&
+//         password === "123456"
+//     ) {
+//         return res.json({
+//             message: "Login Successful"
+//         });
+//     }
+//     return res.status(401).json({
+//         message: "Invalid Credentials"
+//     });
+// });
 
 
 const server = http.createServer(app); 
