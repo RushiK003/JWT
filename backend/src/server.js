@@ -1,7 +1,10 @@
 import http from "http";
 import cors from "cors"
 import express from "express";
+import "dotenv/config";
+
 import authRoutes from "./routes/authRoutes.js"
+import connectDatabase from "./config/database.js";
 
 const app = express();
 
@@ -13,6 +16,8 @@ app.use(cors({
 // below middleware helps to parse(Break down) incoming HTTP request bodies with JSON payloads.
 app.use(express.json()); 
 
+connectDatabase()
+ 
 app.use("/", authRoutes);
 // app.post("/login", (req, res) => {
 //     const { email, password } = req.body;
