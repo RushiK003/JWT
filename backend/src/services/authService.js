@@ -1,5 +1,6 @@
 import User from "../models/User.js"
 import mongoose from "mongoose"
+import bcrypt from "bcrypt"
 
 
 const login = async (email, password) => {
@@ -17,7 +18,14 @@ const login = async (email, password) => {
     console.log("from database: ",user.email)
     console.log("i was at auth services before ")
 
-    if (user.password !== password) {
+    const passwordMatch = await bcrypt.compare(
+        password,
+        user.password
+    );
+
+    // if (user.password !== password) {
+
+    if(!passwordMatch){
         return {
             success: false,
             message: "Invalid Credentials"
