@@ -5,6 +5,7 @@ import "dotenv/config";
 
 import authRoutes from "./routes/authRoutes.js"
 import connectDatabase from "./config/database.js";
+import userRoutes from "./routes/userRoutes.js";    
 
 const app = express();
 
@@ -17,8 +18,12 @@ app.use(cors({
 app.use(express.json()); 
 
 connectDatabase()
- 
-app.use("/", authRoutes);
+
+app.use("/auth", authRoutes);
+app.use("/", userRoutes);
+
+
+
 // app.post("/login", (req, res) => {
 //     const { email, password } = req.body;
 //     // console.log(req.body)

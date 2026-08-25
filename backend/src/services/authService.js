@@ -1,6 +1,7 @@
 import User from "../models/User.js"
 import mongoose from "mongoose"
 import bcrypt from "bcrypt"
+import generateToken from "../../utils/generateToken.js";
 
 
 const login = async (email, password) => {
@@ -32,9 +33,12 @@ const login = async (email, password) => {
         };
     }
 
+    const token = generateToken(user)
+    console.log("Token Generated for", user.email);
     return {
         success: true,
-        message: "Login Successful"
+        message: "Login Successful",
+        token
     };
 
 

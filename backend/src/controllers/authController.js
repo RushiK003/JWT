@@ -16,7 +16,8 @@ const login = async (req, res) => {
         }
 
         return res.json({
-            message: result.message
+            message: result.message,
+            token : result.token
         });
 
     }   catch(error) {
