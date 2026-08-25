@@ -316,6 +316,244 @@ prerequisit : installed
     backend : 
     request resived by server -> allowed by CORS -> request enters server.js -> database connection request intalise by middleware then -> all http request at '/' handled by builtin express middleware app.use -> then auth route handler decides if its /login or /register (we can make /auth/login or /auth/register or /auth/forgotpass) depending on url router send request to corresponeding controller -> controller takes request and decide what to response, not logically but just structure of the response ->  for main logic check, data is send to service handler, service file find and fetch data from already connected database using collection.findone() query -> then service file check  if the credentials match or not -> send raw response back to controller, controller structure response and send back -> axios recive the response and display message 
     
+✅ Level 9 — Finish bcrypt authentication
+    bcrypt produces a hash, not an encrypted string. It is intentionally not reversible/decryptable. During login, bcrypt.compare() hashes/checks the entered password against the stored hash and tells us whether they match.
+
+
+    Install bcrypt module using :
+        npm install bcrypt
+
+    Note : To use this module don't forgot to    import bcrypt from 'bcrypt'   before use 
+
+    Hash the seed user's password, add code before adding it database :
+
+        const hashedPassword = await bcrypt.hash(
+            "123456",
+            10
+        );
+    
+    then,
+        await User.create({
+            name: "Admin",
+            email: "admin@gmail.com",
+            password: hashedPassword        // change 
+        });
+        
+    Reminder : before using seed delete, old pass from database 
+
+    Change authService.js, add in code : 
+
+        const passwordMatch = await bcrypt.compare(
+            password,
+            user.password
+        );
+
+    &, in place of 'if (user.password !== password)' add :
+        
+        if (!passwordMatch) { return{status:false}}
+        
+
+✅ Level 10 — JWT: Create a Token During Login  + Store JWT at Frontend 
+
+    Install jsonwebtoken inside server, JWT is handled on the backend :   
+        npm install jsonwebtoken
+
+
+    Create utils directory inside src, to store token generator : 
+
+    src/utils/generateToken.js : 
+        import jwt from "jsonwebtoken";
+        const generateToken = (user) => {
+            const token = jwt.sign(
+                {
+                    userId: user._id,
+                    email: user.email
+                },
+                process.env.JWT_SECRET,
+                {
+                    expiresIn: "1h"
+                }
+            );
+            return token;
+        };
+
+        export default generateToken;
+
+
+    A JWT has three parts:      HEADER.PAYLOAD.SIGNATURE   // each part seperated by '.' 
+    Understand jwt.sign() :
+        jwt.sign(
+            payload,       // This is information we want to put inside the token.
+            secret,        // The backend uses this secret to create the SIGNATURE.  
+            options        // Expiration - This means the token is valid for given time .
+        );
+
+    Caution : 
+        JWT payloads are normally Encoded (reverseable), not encrypted (not reverseable).
+        For example, someone who has your token can decode the payload and see:
+            {  "userId": "...",   "email": "admin@gmail.com"   }
+        That's why you should never put sensitive information such as passwords, 
+            credit-card numbers, or secrets inside the JWT payload.
+
+    In services/authService.js    add following code : 
+        import generateToken from "../utils/generateToken.js";
+        
+        try {
+            if (!passwordMatch) {return { success: false };}
+
+            const token = generateToken(user);       // Newly added 
+
+            return {
+                success: true,
+                message: "Login Successful",
+                token                               // Newly added
+            };
+        }; 
+    
+    Modify controllers/authController.js response :
+        return res.json({
+            message: result.message,
+            token: result.token                     // Newly added
+        });
+
+    React (frontend) recives :
+        {
+            "message": "Login Successful",
+            "token": "eyJhbGciOiJIUzI1NiIs..."
+        }
+    and can display using :
+        console.log("JWT:", response.data.token);
+
+
+    Store the JWT :
+        For this learning project, let's temporarily use localStorage so you can clearly see the complete flow (in production app jwt never stored in localstorage)
+
+    add following code in Login, handleLogin :
+        const token = response.data.token;          // newly added
+        localStorage.setItem("token", token);       // newly added
+        setMessage(response.data.message);
+
+    this stores token in localStorage, to use this stored token  :
+        const storedToken = localStorage.getItem("token")
+
+For a React + Node/Express web app, a common secure approach is:
+    - Avoid storing JWTs in localStorage if possible, because an XSS attack can read them.
+    - Access JWT: keep it short-lived (e.g. 5–15 minutes).
+    - Refresh token: store it in a Secure + HttpOnly + SameSite cookie. (Advance topic for now)
+    - Use HTTPS in production.
+    - Keep your JWT secret/private key only on the backend.
+
+    Authentication Route Structure
+        * `app.use("/auth", authRoutes)` adds `/auth` as a prefix to all routes defined inside `authRoutes.js`.
+        * Using `/auth` before authentication routes is a common professional practice because it keeps related routes organized and modular.
+        * Example:
+                * `POST /auth/register`
+                * `POST /auth/login`
+                * `POST /auth/logout`
+        * `/auth` clearly identifies authentication-related endpoints, separate from resources such as `/users`, `/products`, or `/orders`.
+
+
+
+    we haven't created the mechanism that says:
+        "Show me your JWT before I allow you to access /profile route."  
+        ->  Protected Route(JWT checked using Middleware )
+
+✅ Level 11 — JWT Middleware + Protected Route
+    we create    
+        middlewares/
+            └── authMiddleware.js
+
+    The middleware is like a security guard, which validate JWT token then only allow let it go to controller and access /profile (which are only access owner) etc (this scenerio is after login & jwt is stored & send in request while accessing data from server)
+
+    using middleware, Get the header & verify previlage or authority
+    This:
+        const authHeader = req.headers.authorization;
+    gets:    Bearer eyJhbGciOiJIUzI1Ni...           
+
+    When React makes a protected request, we'll eventually send:    
+        Authorization: Bearer <JWT>
+    This is called the Authorization header.
+    
+    If there isn't one:
+        401 Unauthorized
+
+    Extract the actual token : 
+        authHeader.split(" ")     => produces: [ "Bearer", "eyJhbGciOiJIUzI1Ni..." ]
+    So:
+        const token = authHeader.split(" ")[1];
+    gets the JWT itself.
+
+    Verify the JWT :
+        const decoded = jwt.verify(
+            token,
+            process.env.JWT_SECRET
+        );
+
+        middlewares/authMiddleware.js
+            import jwt from "jsonwebtoken";
+            const authMiddleware = (req,res,next) => {
+                try {
+                    const authHeader = req.headers.authorization;
+                    if (!authHeader) {
+                        return res.status(401).json({
+                            message: "Authorization header is missing"
+                        });
+                    }
+                    const token = authHeader.splite(" ")[1];
+                    if(!token) {
+                        return res.status(401).json({
+                            message:"Token missing"
+                        });
+                    }
+                    const decoded = jwt.verify(
+                        token,
+                        process.env.JWT_SECRET
+
+                    );
+                    req.user = decoded;
+                    next();
+                } catch( error ) {
+                    return res.status(401).json({
+                        message: "Invalid or expired token"
+                    });
+                }
+            };
+            export default authMiddleware;
+    
+
+
+    Create a protected controller :
+        controllers/userController.js
+            const getProfile = (req, res) => {
+                return res.json({
+                    message: "Profile accessed successfully",
+                    user: req.user
+                });
+            };
+            export default {
+                getProfile
+            };
+    Create user routes
+        routes/userRoutes.js
+            import express from "express";
+            import authMiddleware from "../middlewares/authMiddleware.js";
+            import userController from "../controllers/userController.js";
+
+            const router = express.Router();
+            router.get(
+                "/profile",
+                authMiddleware,
+                userController.getProfile
+            );
+            export default router;
+
+
+    There are three stages(when login done, token verification):
+        GET /profile
+            ↓
+        authMiddleware >> token.verify()
+            ↓
+        getProfile
 
 
 
