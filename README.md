@@ -409,7 +409,7 @@ prerequisit : installed
                 token                               // Newly added
             };
         }; 
-    
+
     Modify controllers/authController.js response :
         return res.json({
             message: result.message,
@@ -428,10 +428,12 @@ prerequisit : installed
     Store the JWT :
         For this learning project, let's temporarily use localStorage so you can clearly see the complete flow (in production app jwt never stored in localstorage)
 
-    add following code in Login, handleLogin :
+    add following code in Login to store Token, handleLogin :
         const token = response.data.token;          // newly added
         localStorage.setItem("token", token);       // newly added
         setMessage(response.data.message);
+
+    For a production authentication system, token storage has important XSS/CSRF security tradeoffs, and a common architecture is to use HttpOnly, Secure cookies for sensitive session/refresh credentials.
 
     this stores token in localStorage, to use this stored token  :
         const storedToken = localStorage.getItem("token")
@@ -554,6 +556,408 @@ For a React + Node/Express web app, a common secure approach is:
         authMiddleware >> token.verify()
             ↓
         getProfile
+
+
+    Add following code to login.jsx, and use recived token to access protected route : 
+                    
+        const [token, setToken] = useState("");   // just to store tempory, on reload its gone
+                                                // better than this store in localstorage
+
+        const handleProfile = async () => {
+            try {
+                const profileResponse = await API.get("/profile", {
+                    headers: {
+                        // Authorization: `Bearer ${token}`
+                        Authorization: `Bearer ${localStorage.getItem("token")}`
+                    }
+                });
+                setMessage(profileResponse.data.message);
+                console.log(profileResponse.data);      
+            } catch (error) {
+                console.error("Error fetching profile:", error.response.data.message);
+                setMessage(error.response.data.message);    
+            }
+        }
+        return (
+                <button className="" onClick={handleProfile}>
+                    Profile
+                </button>
+        )
+        
+
+
+✅ Level 12 — Axios Interceptor + Display user_ID & token 
+    Stored the JWT, now to for access the protected data get token from localstorage:
+        Backend
+           ↓
+          JWT
+           ↓
+         React
+           ↓
+       localStorage (temprorily stored while learing)
+
+    We're going to add an Axios interceptor, which help in accessing /profile :
+        API.get("/profile")
+            ↓
+        Axios Interceptor
+            ↓
+        Get token (for now its in localStorage)
+            ↓
+        Attach Authorization header
+            ↓
+        Send request to backend 
+
+    Backend resives the request :
+        GET /profile
+            ↓
+        authMiddleware
+            ↓
+        extract token      ---- token not found ---> returns "Authorization header missing"
+            ↓
+        jwt.verify()       ---  not matched  ---> returns "401 Unauthorized"
+            ↓
+        req.user = decoded  
+            ↓
+        next()
+            ↓
+        getProfile()
+            ↓
+        send to frontend
+
+
+    What is an interceptor?
+        Think of it as a checkpoint inside Axios.
+        you write  "API.get("/profile");" 
+        and Axios automatically adds:  "Authorization: Bearer <JWT>" in request header
+        
+    Else you have to manually add token to header for each request :
+        API.get("/profile", {
+            headers: {
+                Authorization: `Bearer ${token}`
+            }
+        });
+
+    frontend/src/services/api.js
+        import axios from "axios";
+        const API = axios.create({ baseURL: "http://localhost:5000" });
+        API.interceptors.request.use(
+            (config) => {
+                const token = localStorage.getItem("token");
+                if (token) { config.headers.Authorization = `Bearer ${token}`; }
+                return config;
+            },
+            (error) => {
+                return Promise.reject(error);
+            }
+        );
+        export default API;
+
+
+    frontend/src/components/Profile.jsx
+        import { useEffect, useState } from "react";
+        import API from "../services/api";
+        const Profile = () => {
+            const [user, setUser] = useState(null);
+            const [message, setMessage] = useState("");
+            useEffect(() => {
+                const getProfile = async () => {
+                    try {
+                        const response = await API.get("/profile");
+                        setUser(response.data.user);
+                    } catch (error) {
+                        setMessage(
+                            error.response?.data?.message ||
+                            "Failed to load profile"
+                        );
+                    }
+                };
+                getProfile();
+            }, []);
+
+            return (
+                <div className="p-8">
+                    <h1 className="text-2xl font-bold mb-4">
+                        Profile
+                    </h1>
+                    {message && (
+                        <p>{message}</p>
+                    )}
+                    {user && (
+                        <div>
+                            <p> User ID: {user.userId} </p>
+                            <p> Email: {user.email} </p>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+        export default Profile;
+
+    frontend/src/App.jsx:
+        import Login from "./components/Login";
+        import Profile from "./components/Profile";
+        const App = () => {
+            return (
+                <>
+                    <Login />
+                    <Profile />
+                </>
+            );
+        };
+        export default App;
+    This isn't how we'd structure the final application, we'll eventually use React Router 
+    but it's perfect for learning the JWT flow.
+
+✅ Level 13 - Frontend : React Router + Auth Context + Protected Route
+    We'll learn three concepts for sucure & optimised frontend :
+      1.React Router
+      2.Authentication state
+      3.Protected routes
+
+    [1.]  React Router
+    Inside your frontend/client:
+        npm install react-router-dom
+    
+    "react-router-dom" package :—
+    It gives React the ability to understand browser URLs, and load(route to) the page.
+    In react project,You have one React application, and React Router decides:
+        "The browser URL is /profile, so I should show ProfilePage."
+
+    react-router-dom have in build function, Think it like : 
+        Browser URL   => is monitored by using <BrowserRouter>
+            ↓
+        React Router  => changed URL goes to group of routers
+            ↓
+        "Which component should I show?"  => match with path="" of router
+            ↓
+        Component    =>  loads the element={}
+    
+    <BrowserRouter> : Manages/observes the browser URL for your React Router app.
+
+    <Routes> : Contains your routing rules.
+        <Routes>
+            <Route path="" element={} />
+            <Route path="" element={} />
+            <Route path="" element={} />
+        </Routes>
+
+    <Route path="" element={} /> : Connects a URL to a component.
+        URL → Component
+        For example:   <Route path="/profile" element={<ProfilePage />} />
+
+        The path says:
+        "What URL should trigger this page?"
+
+        The element says:
+        "What should I display?"
+
+
+    <Link to="/profile"> Profile </Link>    // similar to <a> anchor tag 
+        -> Gives the user a clickable way to change the route.
+                Click → change URL to route
+        It is not required for a route to exist.
+
+        You might wonder:  "Why not just use <a>?"
+        Because Link is designed to work with React Router's navigation system, allowing navigation without doing a traditional full-page browser reload.
+
+    Link = user clicks something to navigate.
+    navigate = your JavaScript code decides to navigate.
+
+    The name: useNavigate
+    starts with 'use', which tells you:  "This is a React Hook."
+
+    useNavigate => navigate("");
+        You import it:  
+            import { useNavigate } from "react-router-dom";
+        Then inside a React component:      "ask for the navigation function"
+            const navigate = useNavigate();       // Now 'navigate' is a function.
+        You can call it:
+            navigate("/profile");
+        And React Router will take the user to:
+            path  /profile, and load that element/page
+
+
+    Let's separate pages from components : 
+    src/
+      ├── components/
+      │
+      ├── pages/
+      │   ├── LoginPage.jsx
+      │   └── ProfilePage.jsx
+      └── services/
+            └── api.js
+
+    Move your login UI into:
+    src/pages/LoginPage.jsx
+
+    And add following code LoginPage.jsx, to navigate to profile page:
+        import . . .
+        import { useNavigate } from "react-router-dom";
+        . . . 
+        const handleLogin = async (event) => {
+            event.preventDefault();
+            try { const response = await API.post("/login", { email, password });
+                  localStorage.setItem( "token", response.data.token );
+                  setMessage("Login Successful");
+
+                navigate("/profile");       //// Newly added ////
+
+            } catch (error) {
+                setMessage( error.response?.data?.message || "Login failed" );
+            }
+        };
+    
+    
+    src/pages/ProfilePage.jsx
+        import { useEffect, useState } from "react";
+        import API from "../services/api";
+        const ProfilePage = () => {
+            const [user, setUser] = useState(null);
+            const [message, setMessage] = useState("");
+            useEffect(() => {
+                const getProfile = async () => {
+                    try {
+                        const response = await API.get("/profile");
+                        setUser(response.data.user);
+                    } catch (error) {
+                        setMessage(
+                            error.response?.data?.message ||
+                            "Failed to load profile"
+                        );
+                    }
+                };
+                getProfile();
+            }, []);
+            return (
+                <div className="p-8">
+                    <h1 className="mb-4 text-3xl font-bold">
+                        Profile
+                    </h1>
+                    {message && (
+                        <p>{message}</p>
+                    )}
+                    {user && (
+                        <div>
+                            <p>User ID: {user.userId}</p>
+                            <p>Email: {user.email}</p>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+        export default ProfilePage;
+
+    Changes in App.jsx 
+    frontend/src/App.jsx
+        import {
+            BrowserRouter,
+            Routes,
+            Route
+        } from "react-router-dom";
+        import LoginPage from "./pages/LoginPage";
+        import ProfilePage from "./pages/ProfilePage";
+        const App = () => {
+            return (
+                <BrowserRouter>
+                    <Routes>
+                        <Route
+                            path="/login"
+                            element={<LoginPage />}
+                        />
+                        <Route
+                            path="/profile"
+                            element={<ProfilePage />}
+                        />
+                    </Routes>
+                </BrowserRouter>
+            );
+        };
+        export default App;
+
+
+        [X] But there's a security problem 
+        Right now, anyone can manually type: http://localhost:5173/profile
+        The React application will show the Profile page.
+        The backend will eventually reject the API request because there's no JWT, but from the frontend perspective, we dont have any check or protection, we haven't actually protected the route.
+
+        create ProtectedRoute 
+        frontend/src/components/ProtectedRoute.jsx
+            import { Navigate } from "react-router-dom";
+            const ProtectedRoute = ({ children }) => {
+                const token = localStorage.getItem("token");
+                if (!token) {
+                    return <Navigate to="/login" replace />;
+                }
+                return children;
+            };
+            export default ProtectedRoute;
+
+        Use ProtectedRoute in App.jsx (while routing sensitive data)
+            import {
+                BrowserRouter, Routes, Route, Navigate
+            } from "react-router-dom";
+            import . . .
+            import ProtectedRoute from "./components/ProtectedRoute";
+            const App = () => {
+                return (
+                    <BrowserRouter>
+                        <Routes>
+                            <Route path="/login" element={<LoginPage />} />
+
+                            <Route path="/profile" 
+                                element={
+                                    // creating Protecting layer around it
+
+                                    <ProtectedRoute>     
+                                        <ProfilePage />
+                                    </ProtectedRoute>
+                                }
+                            />
+
+                            // A Route redirect all URL req to '/login' page
+                            <Route              
+                                path="*"
+                                element={
+                                    <Navigate to="/login" replace />
+                                }
+                            />
+                        </Routes>
+                    </BrowserRouter>
+                );
+            };
+            export default App;
+
+
+            Frontend protection  ->   ProtectedRoute
+                only controls the UI/navigation. 
+                (not really validate,just check Token exists or empty)
+                even after expired or fake value, it allow to route further
+            Backend protection   ->  authMiddleware
+                provides the actual security.  
+                jwt.verify() -> INVALID -> 401 Unauthorize access
+
+            Therefore, Never rely on React's ProtectedRoute alone for security.
+
+            What we have learned so far :
+            ___________________________________________________________
+            | Concept           | Purpose                              |
+            | ----------------- | ------------------------------------ |
+            | Axios             | Frontend ↔ Backend communication     |
+            | CORS              | Allows browser cross-origin requests |
+            | Route             | Maps URL → handler                   |
+            | Controller        | Handles request/response             |
+            | Service           | Business logic                       |
+            | Model             | MongoDB data structure               |
+            | bcrypt            | Password hashing/checking            |
+            | JWT `sign()`      | Creates authentication token         |
+            | JWT `verify()`    | Validates token                      |
+            | Middleware        | Runs checks before controller        |
+            | Axios interceptor | Automatically attaches JWT           |
+            | React Router      | Handles frontend URLs                |
+            | ProtectedRoute    | Controls access to frontend pages    |
+            |__________________________________________________________|
+
+
 
 
 

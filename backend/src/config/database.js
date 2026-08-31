@@ -9,7 +9,6 @@ const connectDatabase = async () => {
         console.log("MongoDB connected");
         console.log("Database: ", mongoose.connection.name);
         
-        // console.log("Host: ", mongoose.connection.host);
         await seedDatabase();
     } catch(error) {
         console.error("MongoDB connection failed : ", error.message);
