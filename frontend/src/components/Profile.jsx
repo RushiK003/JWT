@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import API from "../services/api";
+import Navbar from "./Navbar";
 
 const Profile = () => {
 
@@ -20,7 +21,7 @@ const Profile = () => {
 
                 setMessage(
 
-                    error.response?.data?.message ||
+                    error.response?.data?.message ||    
                     "Failed to load profile"
 
                 );
@@ -35,7 +36,7 @@ const Profile = () => {
 
     return (
         <div className="p-8">
-
+            <Navbar />
             <h1 className="text-2xl font-bold mb-4">
                 Profile
             </h1>
@@ -46,6 +47,7 @@ const Profile = () => {
 
             {user && (
                 <div>
+
                     <p>
                         User ID: {user.userId}
                     </p>

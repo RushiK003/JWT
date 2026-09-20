@@ -1,16 +1,20 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/useAuth";
+
 
 import API from "../services/api"
 
 function Login() {
+    const { login } = useAuth();
+
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [message, setMessage] = useState("");
 
     const navigate = useNavigate();
-    const handleLogin = async () => {
-        event.preventDefault();
+    const handleLogin = async (e) => {
+        e.preventDefault();
         try {
             const response = await API.post("/auth/login",{
                 email, 
@@ -23,6 +27,8 @@ function Login() {
                 "token",
                  response.data.token
             );
+
+            login(response.data.token);
 
             setMessage(response.data.message);
 
@@ -37,9 +43,11 @@ function Login() {
 
 
     return (
-        <div className="flex justify-center items-right h-screen p-4">
+        <div className="flex justify-center items-center h-screen p-4">
             <form 
-                onSubmit={handleLogin} 
+                // onSubmit={handleLogin}    '
+                // In HTML forms, clicking a button inside a <form> automatically triggers the form's onSubmit. 
+                // Having onClick on <button/> as well causes handleLogin to execute twice per click
                 className="border p-8 rounded w-80 h-100" 
             >
                 <h1 className="text-2xl mb-5">

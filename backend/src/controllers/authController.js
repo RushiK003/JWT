@@ -17,9 +17,12 @@ const login = async (req, res) => {
 
         return res.json({
             message: result.message,
-            token : result.token
+            token: result.token,
+            user: result.user
+            // message: result.message,
+            // token : result.token
         });
-
+        
     }   catch(error) {
         return res.status(500).json({
             message:"Server error"

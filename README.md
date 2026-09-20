@@ -941,7 +941,7 @@ For a React + Node/Express web app, a common secure approach is:
             What we have learned so far :
             ___________________________________________________________
             | Concept           | Purpose                              |
-            | ----------------- | ------------------------------------ |
+            | ------------------|--------------------------------------|
             | Axios             | Frontend ↔ Backend communication     |
             | CORS              | Allows browser cross-origin requests |
             | Route             | Maps URL → handler                   |
@@ -955,11 +955,402 @@ For a React + Node/Express web app, a common secure approach is:
             | Axios interceptor | Automatically attaches JWT           |
             | React Router      | Handles frontend URLs                |
             | ProtectedRoute    | Controls access to frontend pages    |
-            |__________________________________________________________|
+            |___________________|______________________________________|
+
+    In Next level we will learn about : 
+    Context Hook 
+         is a feature in react that allows you to share data globally across your component tree without having to manually pass props down through every single level. 
+    
+    The Problem Context hook Solves:  Prop Drilling
+        In a standard React application, data is passed top-down (parent to child) via props. If a component deep in the tree needs data from a high-level parent, you have to pass that data through every intermediate component—even if those intermediate components don't care about the data themselves. This is known as prop drilling, and it leads to bloated, hard-to-maintain code
+    
+    Note :
+        before moving forward make sure you understood the difference :
+         
+            Named export   [ export const user = {}; ]  
+                and named import → { user }
+
+            Default export    [ const user = {};    export default user; ] 
+                and default import → [ import user from "./user"; ]
+
+        This distinction is extremely important for Context.
+
+Level 14: AuthContext
+
+    The problem: authentication is scattered
+        different parts of the application handle authentication independently:
+            LoginPage
+            └── localStorage.setItem("token")
+            ProtectedRoute
+            └── localStorage.getItem("token")
+
+    The goal : Create one central place responsible for authentication state.
+                  
+                    AuthProvider
+                         │
+             ┌───────────┼───────────┐
+             ↓           ↓           ↓
+          Login       Navbar      Profile
+             │           │           │
+             └───────────┴───────────┘
+                         ↓
+                   AuthContext
+
+    Think of Context/AuthContext as a shared data container
+
+    It can provide:
+        user
+        isAuthenticated
+        login()
+        logout()
+    to any component inside the provider.
+
+    Instead of passing user through many components:
+        App
+         ↓
+        Navbar
+         ↓
+        UserMenu
+
+    you can directly access it using :
+        const { user } = useAuth();     // or any other named_export
+
+    Working flow : 
+    1. createContext() is imported and AuthContext object is created.
+    2. AuthProvider component manages user state (user, login, logout, restoreAuth).
+    3. <AuthContext.Provider value={{...}}> wraps children and shares the state.
+    4. main.jsx wraps <App /> inside <AuthProvider> so the whole app gets access.
+    5. useAuth() custom hook uses useContext(AuthContext) to read the data.
+    6. Components (Login, Navbar, ProtectedRoute) import useAuth and consume the state.
+    7. On login, LoginPage calls login(response.data.user) to update context state.
+
+    1. createContext()
+
+        const AuthContext = createContext();   //This creates the Context object.
+                    // But creating Context doesn't automatically give it data.
+                    
+        The information is provided later by:
+            <AuthContext.Provider value={...}>
+
+    2. AuthProvider
+
+        export const AuthProvider = ({ children }) => { ... }
+
+        AuthProvider is a React component whose job is to provide authentication data to its children. 
+
+        For example:
+            <AuthProvider>
+                <App />
+            </AuthProvider>
+
+            AuthProvider    
+                │               // Everything inside App can access the AuthContext / auth data.
+                └── App
+                    ├── LoginPage
+                    ├── ProfilePage
+                    ├── Navbar
+                    └── ProtectedRoute
+
+    Create context in frontend (separated for Vite Fast Refresh) :
+    src/context/AuthContext.jsx
+        import { createContext } from "react";
+
+        export const AuthContext = createContext();      // Exported so useAuth and AuthProvider can import it
+
+    src/context/AuthProvider.jsx                         // Component separated so Vite Fast Refresh works
+        import { useState } from "react";
+        import { AuthContext } from "./AuthContext";
+
+        export const AuthProvider = ({ children }) => {
+
+            const [user, setUser] = useState(null);     // This stores the currently logged-in user. 
+            
+            const login = (userData) => {           // This function updates the authentication state.
+                setUser(userData);
+            };
+
+            const logout = () => {                      //Logout performs two important operations:
+                localStorage.removeItem("token");       // 1. Remove JWT from localStorage 
+                setUser(null);                          // 2. Clear React state
+            }; 
+
+            const isAuthenticated = !!user;             // This is a convenient boolean. The !! converts a value into true or false.
+
+            return (
+                <AuthContext.Provider                   
+                    value={{            // Everything placed inside value becomes available to child components using the context.
+                        user,
+                        login,
+                        logout,
+                        isAuthenticated
+                    }}
+                >
+                    {children}      // for Ex., in mainjs : <AuthProvider><App /></AuthProvider> , there App is child which have access of values
+                                    // means: "Render whatever was placed inside AuthProvider, while giving it access to the AuthContext."
+                </AuthContext.Provider>
+            );
+        };
+
+
+    src/context/useAuth.jsx                                         
+        import { useContext } from 'react'
+        import { AuthContext } from './AuthContext'
+
+        export const useAuth = () => {                          // useAuth() is a custom hook.
+            return useContext(AuthContext);
+        };
 
 
 
+    Now to use data from context, Wrap your application : 
+    frontend/src/main.jsx
+        import { StrictMode } from "react";
+        import { createRoot } from "react-dom/client";
+        import App from "./App.jsx";
+        import { AuthProvider } from "./context/AuthProvider";
+        createRoot(document.getElementById("root")).render(
+            <StrictMode>
+                <AuthProvider>
+                    <App />
+                </AuthProvider>
+            </StrictMode>
+        );
 
+    Every component inside AuthProvider can use authentication or we can say value : { user,login,logout,isAuth}.
+
+
+    Return user information from backend in better/optimum way
+    In authService.js, change the successful return:
+        ...
+        return {
+            success: true,
+            message: "Login Successful",
+            token,
+            user: {
+                userId: user._id,
+                email: user.email,
+                name: user.name
+            }
+        };
+        ...
+    
+    & Then in authController.js:
+        ...
+        return res.json({
+            message: result.message,
+            token: result.token,
+            user: result.user
+        });
+        ...
+
+    
+    Modify LoginPage  : 
+        . . . . ....
+        import { useAuth } from "../context/useAuth";  // newly added 
+
+        function Login() {
+            const { login } = useAuth();   // destructuring and takeing login function ? 
+            . . . . ...
+            const navigate = useNavigate();   
+
+            const handleLogin = async (e) => {
+                e.preventDefault();
+                try {
+                    const response = await API.post("/auth/login",{ email, password });
+                    // Now from backend respose formate change to : 
+                    // { "message": "Successful", "token": "eyJhb...","user": {"userId":"...","email":"...", "name": "..." }
+
+                    localStorage.setItem(
+                        "token",
+                        response.data.token
+                    );
+
+                    login(response.data.user);        // We want LoginPage to tell AuthContext: "The user successfully logged in."
+            
+                    navigate("/profile");
+
+                } catch (error) {   }
+            }
+
+            return (
+                <div className="flex justify-center items-center h-screen p-4">
+                    <form >
+                        <h1 > Login </h1> 
+                        <input />   <input />    
+                        <button> Login  </button>
+                        <div className="mt-2"> {message} </div>
+                    </form>
+                </div>
+            );
+        } }
+        export default Login;
+
+
+    Modify ProtectedRoute : 
+        import { Navigate } from "react-router-dom";
+        import { useAuth } from "../context/useAuth";
+
+        const ProtectedRoute = ({ children }) => {
+
+            const { isAuthenticated } = useAuth();
+
+            if (!isAuthenticated) {
+                return <Navigate to="/login" replace />;
+            }
+
+            return children;
+        };
+
+        export default ProtectedRoute;
+
+    Create NavBar : frontend/components/Navbar.jsx
+        import { useAuth } from "../context/useAuth";
+        import { useNavigate } from "react-router-dom";
+
+        const Navbar = () => {
+            const { user, logout } = useAuth();
+            const navigate = useNavigate();
+
+            const handleLogout = () => {
+                logout();
+                navigate('/login');
+
+            };
+
+            return  ( 
+                < nav className="flex items-center justify-between border-b p-4">
+                    <h1 className="font-bold">
+                        MERN Auth
+                    </h1>
+
+                    {user && {
+                        <div className="flex items-center gap-4">
+                            <span>
+                                {user.email}
+                            </span>
+                            <button
+                                onClick={handleLogout}
+                                className="rounded bg-red-500 px-3 py-2 text-white"
+                            >
+                            Logout
+                            </button>
+                        </div> 
+                    }}
+                </nav>
+            );
+        };
+        export default Navbar;
+
+    Add Navbar to Profile 
+        At the top of ProfilePage.jsx:
+            import Navbar from "../components/Navbar";
+
+        Then use component using :
+            <Navbar />
+
+    ⚠️ There's one problem we haven't solved yet
+     - if we refresh the page, react starts from scrach and 'user' useState set to "null"
+     - Even through, In localStorage JWT sitll exists 
+
+Level 14.1   Restore authentication after refresh    ( just part of level 14 - refresh token )
+
+    so what we do is :
+        on refresh  whole frontend react reloads, user is set to null so we do :
+
+                    
+            Browser Refresh (F5)
+                ▼
+            useEffect(()=>{},[]) is triggered at initialisation to restore token
+
+            AuthProvider mounts with loading = true
+                │
+                ├── Reads localStorage.getItem("token")
+                │
+                ├── If NO token:
+                │     loading = false (Redirects to /login)
+                │
+                └── If token EXISTS:
+                        Calls GET /profile (backend verifies token credibility)
+                        ├── Valid:   setUser(response.data.user)  ──>  State RESTORED!
+                        └── Invalid: localStorage.removeItem("token"), setUser(null)
+                        Finally: setLoading(false)
+
+    Add an authentication check in AuthProvider.jsx
+    frontend/src/context/AuthProvider.jsx 
+        import {
+            useState,
+            useEffect                   // used to check if token exists when react refreshes 
+        } from "react";
+        import { AuthContext } from "./AuthContext";
+        import API from "../services/api";
+
+        export const AuthProvider = ({ children }) => {
+            .... ... ... .. . 
+            useEffect(() => {
+                const restoreAuth = async () => {
+                    const token = localStorage.getItem("token");
+                    if (!token) {
+                        setLoading(false);
+                        return;
+                    }
+                    try {
+                        const response = await API.get("/profile");         // token need to jwt.verify(), and 
+                        setUser(response.data.user);
+                    } catch (error) {
+                        localStorage.removeItem("token");
+                        setUser(null);
+                    } finally {
+                        setLoading(false);
+                    }
+                };
+                restoreAuth();
+                
+            }, []);         // The empty array: means Run this effect when the component is initially mounted.
+
+            const isAuthenticated = !!user;
+
+            return (
+                <AuthContext.Provider
+                    value={{
+                        user,
+                        login,
+                        logout,
+                        isAuthenticated,
+                        loading                     // Newly added to context
+                    }}
+                >
+                    {children}
+                </AuthContext.Provider>
+            );
+        };
+
+        Update ProtectedRoute    frontend/components/ProtectedRoute.jsx
+            import { Navigate } from "react-router-dom";
+            import { useAuth } from "../context/useAuth";
+
+            const ProtectedRoute = ({ children }) => {
+
+                const {                                 // load isAuth, loading status from useAuth()
+                    isAuthenticated,
+                    loading
+                } = useAuth();
+
+                if (loading) {                          // display loading on screen till token is Restored 
+                    return (
+                        <div className="flex min-h-screen items-center justify-center">
+                            <p>Checking authentication...</p>
+                        </div>
+                    );
+                }
+
+                if (!isAuthenticated) {                         
+                    return <Navigate to="/login" replace />;
+                }
+
+                return children;
+            };
+
+            export default ProtectedRoute;
 
 -------------------------------------------------------------------------------------
 

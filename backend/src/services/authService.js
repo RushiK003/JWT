@@ -5,7 +5,6 @@ import generateToken from "../../utils/generateToken.js";
 
 
 const login = async (email, password) => {
-    console.log("i was at auth services", email)
     console.log("Searching for email:", JSON.stringify(email), " on ", mongoose.connection.name);
     const user = await User.findOne({ email });
     
@@ -38,8 +37,18 @@ const login = async (email, password) => {
     return {
         success: true,
         message: "Login Successful",
-        token
+        token,
+        user: {
+            userId: user._id,
+            email: user.email,
+            name: user.name
+        }
     };
+    // return {
+    //     success: true,
+    //     message: "Login Successful",
+    //     token
+    // };
 
 
     // if (
